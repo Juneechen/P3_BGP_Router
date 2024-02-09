@@ -30,17 +30,23 @@ class Router:
 
     def run(self):
         while True:
+            # get sockets that are ready for reading, wait for up to 0.1 seconds
             socks = select.select(self.sockets.values(), [], [], 0.1)[0]
+
+            # read from each ready socket
             for conn in socks:
                 k, addr = conn.recvfrom(65535)
                 srcif = None
-                for sock in self.sockets:
+                # identify the socket currently being read from
+                for sock in self.sockets: 
                     if self.sockets[sock] == conn:
                         srcif = sock
-                        break
+                        break # found
                 msg = k.decode('utf-8')
 
                 print("Received message '%s' from %s" % (msg, srcif))
+                
+                # TODO: process the message, identify type, and act accordingly
         return
 
 if __name__ == "__main__":
