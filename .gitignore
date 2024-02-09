@@ -1,0 +1,5 @@
+# ignore VS code directory
+.vscode
+
+# python
+__pycache__/
