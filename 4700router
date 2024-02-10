@@ -1,9 +1,14 @@
 #!/usr/bin/env -S python3 -u
 
 import argparse, socket, time, json, select, struct, sys, math
+from MessageHandler import MessageHandler
 
 class Router:
+    """_summary_
 
+    Returns:
+        _type_: _description_
+    """
     relations = {}
     sockets = {}
     ports = {}
@@ -11,6 +16,8 @@ class Router:
     def __init__(self, asn, connections):
         print("Router at AS %s starting up" % asn)
         self.asn = asn
+        self.message_handler = MessageHandler(self)
+
         for relationship in connections:
             port, neighbor, relation = relationship.split("-")
 
@@ -26,13 +33,16 @@ class Router:
         return "%d.%d.%d.%d" % (quads[0], quads[1], quads[2], quads[3])
 
     def send(self, network, message):
-        self.sockets[network].sendto(message.encode('utf-8'), ('localhost', self.ports[network]))
+        self.sockets[network].sendto(message.encode('utf-8'), ('localhost', self.ports[network])) #Shujun's
+
+    def sendJson(self, network, message):
+        self.sockets[network].sendto(json.dumps(message).encode('utf-8'), ('localhost', self.ports[network])) #modified
 
     def run(self):
         while True:
             # get sockets that are ready for reading, wait for up to 0.1 seconds
+            # print("HERE", self.sockets.values())
             socks = select.select(self.sockets.values(), [], [], 0.1)[0]
-
             # read from each ready socket
             for conn in socks:
                 k, addr = conn.recvfrom(65535)
@@ -45,8 +55,9 @@ class Router:
                 msg = k.decode('utf-8')
 
                 print("Received message '%s' from %s" % (msg, srcif))
-                
-                # TODO: process the message, identify type, and act accordingly
+
+
+                self.message_handler.handle_message(msg, srcif)
         return
 
 if __name__ == "__main__":
