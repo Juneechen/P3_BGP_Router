@@ -40,16 +40,20 @@ class MessageHandler:
             # print(f'Received update for network {network}/{netmask} via {srcif} with ASPath {ASPath}')
             # print('RELATIONS', self.router.relations.get(srcif))
             
-            # # only send update to neighbors if the source is a customer
+            # # only sending update to neighbors if the source is a customer:
             # if self.router.relations.get(srcif) == 'cust':
             #     self.send_update_to_neighbors(update_msg, srcif)
 
-            # TODO: should maybe send msg from any neighbor to customer as well? 
+            # should probably send msg from any neighbor to customer as well
             self.send_update_to_neighbors(update_msg, srcif)
+
+            # TODO: cache the update message
+            self.router.cache_update(update_msg, srcif)
             
-            # TODO: run dijkstra to update the my router's routing table
-            # self.router.update_routing_table(update_msg, srcif)
+            self.router.update_table(network, netmask, srcif, update_msg['msg']['localpref'], ASPath)
+            
                 
+
         except KeyError as e:
             print(f'Error processing update message: {e}')
             
@@ -62,7 +66,7 @@ class MessageHandler:
             # may send update to all neighbors except the source
             if neighbor != srcif: 
                 # if relation == 'cust' or (relation in ['peer', 'prov'] and self.relations[srcif] == 'cust'):
-                
+
                 # send if src is customer or neighbor is customer 
                 if relation == 'cust' or self.router.relations[srcif] == 'cust':
                     print(f'----- Forwarding update to {relation} at {neighbor} -----')
@@ -83,14 +87,37 @@ class MessageHandler:
                     }
                     self.router.sendJson(neighbor, forwarded_msg)
                     # print(f'Sent update to {neighbor}')
+
+                    # self.router.send(neighbor, json.dumps(forwarded_msg))   
                     print("----- Forwarding completed -----")
 
 
-    def handle_data_message(self, update, srcif):
+    def handle_data_message(self, msg: dict, srcif):
+        '''
+        msg: 
+        {'src': '172.168.0.25', 'dst': '192.168.0.25', 'type': 'data', 'msg': {'ignore': 'this'}}
+        '''
+
         print("----- handling DATA message from", self.router.relations.get(srcif), "at", srcif, "-----")
 
-        #TODO: Implement data message
-        pass
+        # Tidentify the destination AS and forward the message to the next hop
+
+        dst = msg['dst']
+        next_hop = self.router.get_route(dst) 
+        if next_hop:
+            # TODO: apply rules (check relationship, etc.)
+            print(f'Forwarding data to {next_hop} for {dst}')
+            self.router.sendJson(next_hop, msg)
+        else:
+            print(f'No route to {dst} found in the routing table')
+
+
+
+    def handle_dump_message(self, update, srcif):
+        print("----- handling DUMP message from", self.router.relations.get(srcif), "at", srcif, "-----")
+
+        self.router.sendJson(srcif, self.router.cache)
+        # TODO: fix dump msg format
 
 
     def handle_unknown_message(self, msg, srcif):

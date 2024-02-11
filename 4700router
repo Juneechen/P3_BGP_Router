@@ -2,6 +2,7 @@
 
 import argparse, socket, time, json, select, struct, sys, math
 from MessageHandler import MessageHandler
+import utils
 
 class Router:
     '''_summary_
@@ -12,6 +13,8 @@ class Router:
     relations = {}
     sockets = {}
     ports = {}
+    cache = [] # list of dictionaries, each is a routing announcement
+    routing_table = {} # { 'dest network': { localPref : 100, ...  } }
 
     def __init__(self, asn, connections):
         print("Router at AS %s starting up" % asn)
@@ -38,10 +41,78 @@ class Router:
     def sendJson(self, network, message):
         self.sockets[network].sendto(json.dumps(message).encode('utf-8'), ('localhost', self.ports[network])) #modified
 
+    def cache_update(self, update_msg: dict, srcif):
+        ''' Cache the update message
+        '''
+        # print('CACHING', update_msg)
+        update_msg['peer'] = srcif
+        self.cache.append(update_msg)
+
+    def update_table(self, network, netmask, nexthop, localPref, ASPath):
+        '''       
+        "original msg from srcif": {
+                "network": "172.168.0.0",
+                "netmask": "255.255.0.0",
+                "localpref": 100,
+                "ASPath": [2],
+                "origin": "EGP",
+                "selfOrigin": true
+            }
+        nexthop = srcif
+        '''
+        # TODO: turn router table into a graph and apply dijkstra to update?
+
+        if not network in self.routing_table:
+            self.add_route(network, netmask, nexthop, localPref, ASPath)
+        else:
+            if localPref > self.routing_table[network]['localPref']:
+                self.routing_table[network]['localPref'] = localPref
+                self.routing_table[network]['nexthop'] = nexthop
+                self.routing_table[network]['ASPath'] = ASPath
+
+    def add_route(self, network, netmask, nexthop, localPref, ASPath):
+        ''' Add a route to the routing table
+        '''
+        # Create a new entry in the routing table for the destination network
+        self.routing_table[network] = {
+            'netmask': netmask,
+            'nexthop': nexthop,
+            'localPref': localPref,
+            'ASPath': ASPath
+        }
+
+
+    def get_route(self, dest):
+        ''' 
+        Find the route to a destination network, return the next hop if exists.
+        encoding IP addresses as numbers and using bitwise logic to determine 
+        (1) whether two addresses match and 
+        (2) the length of the match in bits
+        '''
+
+        longest_match = 0
+        next_hop = None
+
+        # encoding IP addresses and mask as numbers
+        dest_ip_int = utils.parse_ip(dest)
+
+        for network, route in self.routing_table.items():
+            network_ip_int = utils.parse_ip(network)
+            mask_int = utils.parse_ip(route['netmask'])
+            # apply bitwise logic and find longest match
+            if (dest_ip_int & mask_int) == (network_ip_int & mask_int):
+                if mask_int > longest_match:
+                    longest_match = mask_int
+                    next_hop = route['nexthop']
+
+        return next_hop
+
+    
+
     def run(self):
         while True:
-            # get sockets that are ready for reading, wait for up to 0.1 seconds
             # print('HERE', self.sockets.values())
+            # get sockets that are ready for reading, wait for up to 0.1 seconds
             socks = select.select(self.sockets.values(), [], [], 0.1)[0]
             # read from each ready socket
             for conn in socks:
@@ -56,9 +127,11 @@ class Router:
 
                 print("Received message '%s' from %s" % (msg, srcif))
 
-
                 self.message_handler.handle_message(msg, srcif)
         return
+    
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='route packets')
