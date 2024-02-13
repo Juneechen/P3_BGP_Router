@@ -5,6 +5,7 @@ import socket
 import json
 import select
 import sys
+from copy import deepcopy
 
 class MessageHandler:
     ''' Class to handle the messages received by the AS and processing them based on their type
@@ -19,12 +20,11 @@ class MessageHandler:
 
             if msg_type:
                 # Call the corresponding method based on the message type
-                # print('HERE', msg_type)
                 method_name = f'handle_{msg_type}_message'
                 handler_method = getattr(self, method_name, self.handle_unknown_message)
                 handler_method(parsed_msg, srcif)
             else:
-                print('Received message with no type:', msg)
+                print(f'-------- Received message with no type: {msg} ---------')
 
         except json.JSONDecodeError as e:
             print(f'Error decoding JSON: {e}')
@@ -37,23 +37,13 @@ class MessageHandler:
             netmask = update_msg['msg']['netmask']
             ASPath = update_msg['msg']['ASPath']
 
-            # print(f'Received update for network {network}/{netmask} via {srcif} with ASPath {ASPath}')
-            # print('RELATIONS', self.router.relations.get(srcif))
-            
-            # # only sending update to neighbors if the source is a customer:
-            # if self.router.relations.get(srcif) == 'cust':
-            #     self.send_update_to_neighbors(update_msg, srcif)
-
-            # should probably send msg from any neighbor to customer as well
             self.send_update_to_neighbors(update_msg, srcif)
-
-            # TODO: cache the update message
             self.router.cache_update(update_msg, srcif)
-            
-            self.router.update_table(network, netmask, srcif, update_msg['msg']['localpref'], ASPath)
-            
-                
+            self.router.update_table(update_msg['msg'], srcif)
 
+            # print('CACHED: ', update_msg)
+            # print('----- Updated table ---------', self.router.routing_table)
+            
         except KeyError as e:
             print(f'Error processing update message: {e}')
             
@@ -63,17 +53,12 @@ class MessageHandler:
 
         for neighbor, relation in self.router.relations.items():
             # print('NEIGHBOR:', neighbor, 'RELATION:', relation)
-            # may send update to all neighbors except the source
+            # might send update to all neighbors except the source
             if neighbor != srcif: 
-                # if relation == 'cust' or (relation in ['peer', 'prov'] and self.relations[srcif] == 'cust'):
-
                 # send if src is customer or neighbor is customer 
                 if relation == 'cust' or self.router.relations[srcif] == 'cust':
                     print(f'----- Forwarding update to {relation} at {neighbor} -----')
-                    # aspath = [self.router.asn] + update_msg['msg']['ASPath']
-                    # as_path_str = ','.join(map(str, [self.router.asn] + update_msg['msg']['ASPath']))
-                    # as_path_str = f'[{self.router.asn},' + ','.join(map(str, update_msg['msg']['ASPath'])) + ']'
-                    # print(aspath,'PATH')
+
                     forwarded_msg = {
                         'msg': {
                             'netmask': update_msg['msg']['netmask'],
@@ -86,10 +71,7 @@ class MessageHandler:
                         'type': 'update'
                     }
                     self.router.sendJson(neighbor, forwarded_msg)
-                    # print(f'Sent update to {neighbor}')
-
                     # self.router.send(neighbor, json.dumps(forwarded_msg))   
-                    print("----- Forwarding completed -----")
 
 
     def handle_data_message(self, msg: dict, srcif):
@@ -100,16 +82,23 @@ class MessageHandler:
 
         print("----- handling DATA message from", self.router.relations.get(srcif), "at", srcif, "-----")
 
-        # Tidentify the destination AS and forward the message to the next hop
-
+        # identify the destination AS and forward the message to the next hop
         dst = msg['dst']
         next_hop = self.router.get_route(dst) 
-        if next_hop:
-            # TODO: apply rules (check relationship, etc.)
-            print(f'Forwarding data to {next_hop} for {dst}')
+        # get_route() returns a single valid match, longest prefix and rules applied in get_route()
+
+        if next_hop: 
+            print(f'--------- Forwarding data to {next_hop} for {dst} ----------')
             self.router.sendJson(next_hop, msg)
         else:
             print(f'No route to {dst} found in the routing table')
+            no_route_msg = {
+                    'src': msg['src'],
+                    'dst': dst,
+                    'type': 'no route',
+                    'msg': {}
+                }
+            self.router.sendJson(srcif, no_route_msg)
 
 
 

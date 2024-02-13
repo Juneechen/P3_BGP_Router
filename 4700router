@@ -3,18 +3,17 @@
 import argparse, socket, time, json, select, struct, sys, math
 from MessageHandler import MessageHandler
 import utils
+from copy import deepcopy
 
 class Router:
-    '''_summary_
-
-    Returns:
-        _type_: _description_
+    ''' 
+    Class to represent the router
     '''
     relations = {}
     sockets = {}
     ports = {}
     cache = [] # list of dictionaries, each is a routing announcement
-    routing_table = {} # { 'dest network': { localPref : 100, ...  } }
+    routing_table = {} # { 'dest network': { localpref : 100, ...  } }
 
     def __init__(self, asn, connections):
         print("Router at AS %s starting up" % asn)
@@ -45,41 +44,36 @@ class Router:
         ''' Cache the update message
         '''
         # print('CACHING', update_msg)
-        update_msg['peer'] = srcif
-        self.cache.append(update_msg)
+        cache_msg = deepcopy(update_msg)
+        cache_msg['msg']['peer'] = srcif
 
-    def update_table(self, network, netmask, nexthop, localPref, ASPath):
+        self.cache.append(cache_msg)
+
+    def update_table(self, msg: dict, srcif):
         '''       
-        "original msg from srcif": {
+        msg from srcif: {
                 "network": "172.168.0.0",
                 "netmask": "255.255.0.0",
                 "localpref": 100,
                 "ASPath": [2],
                 "origin": "EGP",
                 "selfOrigin": true
-            }
-        nexthop = srcif
+            },
+        add key nexthop = srcif
         '''
         # TODO: turn router table into a graph and apply dijkstra to update?
 
-        if not network in self.routing_table:
-            self.add_route(network, netmask, nexthop, localPref, ASPath)
-        else:
-            if localPref > self.routing_table[network]['localPref']:
-                self.routing_table[network]['localPref'] = localPref
-                self.routing_table[network]['nexthop'] = nexthop
-                self.routing_table[network]['ASPath'] = ASPath
+        network = msg['network']
+        copy = deepcopy(msg)
+        copy['nexthop'] = srcif
+        # TODO: verify whether to append our router to the ASPath or not
 
-    def add_route(self, network, netmask, nexthop, localPref, ASPath):
-        ''' Add a route to the routing table
-        '''
-        # Create a new entry in the routing table for the destination network
-        self.routing_table[network] = {
-            'netmask': netmask,
-            'nexthop': nexthop,
-            'localPref': localPref,
-            'ASPath': ASPath
-        }
+        if not network in self.routing_table:
+            self.routing_table[network] = copy
+        else:
+            if msg['localpref'] > self.routing_table[network]['localpref'] and True: # TODO: expand update logic?
+                self.routing_table[network] = copy
+
 
 
     def get_route(self, dest):
@@ -88,10 +82,12 @@ class Router:
         encoding IP addresses as numbers and using bitwise logic to determine 
         (1) whether two addresses match and 
         (2) the length of the match in bits
+        Then, apply rules and longest prefix match to find the next hop
         '''
 
-        longest_match = 0
-        next_hop = None
+        matching_routes = []
+        # longest_match = 0
+        # next_hop = None
 
         # encoding IP addresses and mask as numbers
         dest_ip_int = utils.parse_ip(dest)
@@ -99,19 +95,25 @@ class Router:
         for network, route in self.routing_table.items():
             network_ip_int = utils.parse_ip(network)
             mask_int = utils.parse_ip(route['netmask'])
-            # apply bitwise logic and find longest match
+
+            # apply bitwise logic and find all matches, 
+            # in case the longest match does not satisfy rules (maybe src is peer and next hope is also peer?)
             if (dest_ip_int & mask_int) == (network_ip_int & mask_int):
-                if mask_int > longest_match:
-                    longest_match = mask_int
-                    next_hop = route['nexthop']
+                matching_routes.append((network, route, mask_int))
+                
+                # if mask_int > longest_match:
+                #     longest_match = mask_int
+                #     next_hop = route['nexthop']
 
-        return next_hop
-
+        if not matching_routes:
+            return None
+        else:
+            sorted_routes = sorted(matching_routes, key=utils.custom_sort, reverse=True)
+            return sorted_routes[0][1]['nexthop']
     
 
     def run(self):
         while True:
-            # print('HERE', self.sockets.values())
             # get sockets that are ready for reading, wait for up to 0.1 seconds
             socks = select.select(self.sockets.values(), [], [], 0.1)[0]
             # read from each ready socket
