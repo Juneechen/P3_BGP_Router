@@ -92,6 +92,7 @@ class Router:
         # encoding IP addresses and mask as numbers
         dest_ip_int = utils.parse_ip(dest)
 
+        # Find all matching routes
         for network, route in self.routing_table.items():
             network_ip_int = utils.parse_ip(network)
             mask_int = utils.parse_ip(route['netmask'])

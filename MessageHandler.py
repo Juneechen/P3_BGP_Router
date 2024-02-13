@@ -104,7 +104,6 @@ class MessageHandler:
 
     def handle_dump_message(self, update, srcif):
         print("----- handling DUMP message from", self.router.relations.get(srcif), "at", srcif, "-----")
-
         self.router.sendJson(srcif, self.router.cache)
         # TODO: fix dump msg format
 
