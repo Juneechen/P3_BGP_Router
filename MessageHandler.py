@@ -32,14 +32,16 @@ class MessageHandler:
     def handle_update_message(self, update_msg, srcif):
         print("----- handling UPDATE message from", self.router.relations.get(srcif), "at", srcif, "-----")
 
-        try:
-            network = update_msg['msg']['network']
-            netmask = update_msg['msg']['netmask']
-            ASPath = update_msg['msg']['ASPath']
+        msg = update_msg['msg']
 
-            self.send_update_to_neighbors(update_msg, srcif)
-            self.router.cache_update(update_msg, srcif)
-            self.router.update_table(update_msg['msg'], srcif)
+        try:
+            network = msg['network']
+            netmask = msg['netmask']
+            ASPath = msg['ASPath']
+
+            self.router.cache_update(update_msg, srcif) # cache the complete update msg
+            self.router.update_table(msg, srcif) # stores update_msg['msg'] + key "peer" = srcif
+            self.send_update_to_neighbors(msg, srcif)
 
             # print('CACHED: ', update_msg)
             # print('----- Updated table ---------', self.router.routing_table)
@@ -48,7 +50,7 @@ class MessageHandler:
             print(f'Error processing update message: {e}')
             
     # Inside the Router class
-    def send_update_to_neighbors(self, update_msg, srcif):
+    def send_update_to_neighbors(self, msg, srcif):
         # print('UPDATEMSG', update_msg, 'HAHA')
 
         for neighbor, relation in self.router.relations.items():
@@ -61,10 +63,10 @@ class MessageHandler:
 
                     forwarded_msg = {
                         'msg': {
-                            'netmask': update_msg['msg']['netmask'],
+                            'netmask': msg['netmask'],
                             # 'ASPath': [self.router.asn] + update_msg['msg']['ASPath'],
-                            'ASPath': [self.router.asn] + update_msg['msg']['ASPath'],
-                            'network': update_msg['msg']['network']
+                            'ASPath': [self.router.asn] + msg['ASPath'],
+                            'network': msg['network']
                         },
                         'src': self.router.our_addr(neighbor),
                         'dst': neighbor, # Set destination to the neighbor
@@ -101,27 +103,31 @@ class MessageHandler:
             self.router.sendJson(srcif, no_route_msg)
 
 
-
     def handle_dump_message(self, update, srcif):
         print("----- handling DUMP message from", self.router.relations.get(srcif), "at", srcif, "-----")
         # Assuming router.cache is a list of dictionaries containing route announcements
         cached_routes = self.router.cache
         routing_table = self.router.routing_table
-        converted_msg = list(routing_table.values())
-        print("Routing table:", converted_msg)
+        # converted_msg = list(routing_table.values()) 
+        all_routes = list(routing_table.values()) # each value is a list of dictionaries
 
-        # TODO: Perform aggregation on cached_routes if needed
+        # print("Routing table:", all_routes)
+
+        # TODO: per instruction: need to perform aggregation (see next section) on these announcements before you send your response.
 
         # Create the "table" message format
-        table_message = {
+        table_msg = {
             "src": update["dst"],          # Change to your router's IP
             "dst": update["src"],
             "type": "table",
-            "msg": converted_msg
+            "msg": []
         }
 
+        for routes_for_one_dst in all_routes:
+            table_msg["msg"].extend(routes_for_one_dst)
+
         # Send the "table" message back to the source router
-        self.router.sendJson(srcif, table_message)
+        self.router.sendJson(srcif, table_msg)
 
 
     def handle_unknown_message(self, msg, srcif):
