@@ -232,7 +232,7 @@ class PeerRouter:
     if not self.remote_port:
       self.remote_port = addr[1]
 
-    print("Type of msg:", type(msg))
+    # print("Type of msg:", type(msg))
     if msg["type"] == "data":
       if not self.was_announced(msg["dst"]):
         add_error(now(), "ERROR: Peer %s received message %s destined for a different network" % (self.ip, data.decode('utf-8')))
