@@ -4,6 +4,7 @@ import argparse, socket, time, json, select, struct, sys, math
 from MessageHandler import MessageHandler
 import utils
 from copy import deepcopy
+from collections import defaultdict
 
 class Router:
     ''' 
@@ -13,7 +14,7 @@ class Router:
     sockets = {}
     ports = {}
     cache = [] # list of dictionaries, each is a routing announcement
-    routing_table = {} # { 'dest network': { localpref : 100, ...  } }
+    routing_table = defaultdict(list) # network -> a list of all known pathes { 'dest network': [{ localpref : 100, ...  }, {}, ...] }
 
     def __init__(self, asn, connections):
         print("Router at AS %s starting up" % asn)
@@ -45,7 +46,7 @@ class Router:
         '''
         # print('CACHING', update_msg)
         cache_msg = deepcopy(update_msg)
-        cache_msg['msg']['peer'] = srcif
+        # cache_msg['msg']['peer'] = srcif
 
         self.cache.append(cache_msg)
 
@@ -59,21 +60,24 @@ class Router:
                 "origin": "EGP",
                 "selfOrigin": true
             },
-        add key nexthop = srcif
+        add key "peer" (nexthop for this path) = srcif
         '''
         # TODO: turn router table into a graph and apply dijkstra to update?
 
         network = msg['network']
         copy = deepcopy(msg)
-        # copy['nexthop'] = srcif
         copy['peer'] = srcif
+
         # TODO: verify whether to append our router to the ASPath or not
 
-        if not network in self.routing_table:
-            self.routing_table[network] = copy
-        else:
-            if msg['localpref'] > self.routing_table[network]['localpref'] and True: # TODO: expand update logic?
-                self.routing_table[network] = copy
+        # skip rules (for now until error), store all routes in our routing table
+        self.routing_table[network].append(copy)
+
+        # if not network in self.routing_table:
+        #     self.routing_table[network] = copy
+        # else:
+        #     if msg['localpref'] > self.routing_table[network]['localpref'] and True: # TODO: expand update logic?
+        #         self.routing_table[network] = copy
 
 
 
@@ -85,6 +89,7 @@ class Router:
         (2) the length of the match in bits
         Then, apply rules and longest prefix match to find the next hop
         '''
+        # TODO: drop “data” messages when the transit relationship is not profitable.
 
         matching_routes = []
         # longest_match = 0
@@ -94,24 +99,27 @@ class Router:
         dest_ip_int = utils.parse_ip(dest)
 
         # Find all matching routes
-        for network, route in self.routing_table.items():
-            network_ip_int = utils.parse_ip(network)
-            mask_int = utils.parse_ip(route['netmask'])
+        for network, list_of_routes in self.routing_table.items():
+            for route in list_of_routes:
+                network_ip_int = utils.parse_ip(network)
+                mask_int = utils.parse_ip(route['netmask'])
 
-            # apply bitwise logic and find all matches, 
-            # in case the longest match does not satisfy rules (maybe src is peer and next hope is also peer?)
-            if (dest_ip_int & mask_int) == (network_ip_int & mask_int):
-                matching_routes.append((network, route, mask_int))
-                
+                # apply bitwise logic and find all matches, 
+                # in case the longest match does not satisfy rules (maybe src is peer and next hope is also peer?)
+                if (dest_ip_int & mask_int) == (network_ip_int & mask_int):
+                    matching_routes.append((network, route, mask_int))
+
                 # if mask_int > longest_match:
                 #     longest_match = mask_int
-                #     next_hop = route['nexthop']
+                #     next_hop = route['peer']
+        
+        # TODO: if source is not customer, filter out non-customer next hops
 
         if not matching_routes:
             return None
         else:
             sorted_routes = sorted(matching_routes, key=utils.custom_sort, reverse=True)
-            # return sorted_routes[0][1]['nexthop']
+            # return sorted_routes[0][1]['peer']
             return sorted_routes[0][1]['peer']
     
 
