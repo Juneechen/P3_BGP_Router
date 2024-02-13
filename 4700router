@@ -65,7 +65,8 @@ class Router:
 
         network = msg['network']
         copy = deepcopy(msg)
-        copy['nexthop'] = srcif
+        # copy['nexthop'] = srcif
+        copy['peer'] = srcif
         # TODO: verify whether to append our router to the ASPath or not
 
         if not network in self.routing_table:
@@ -110,7 +111,8 @@ class Router:
             return None
         else:
             sorted_routes = sorted(matching_routes, key=utils.custom_sort, reverse=True)
-            return sorted_routes[0][1]['nexthop']
+            # return sorted_routes[0][1]['nexthop']
+            return sorted_routes[0][1]['peer']
     
 
     def run(self):

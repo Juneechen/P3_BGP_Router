@@ -104,8 +104,24 @@ class MessageHandler:
 
     def handle_dump_message(self, update, srcif):
         print("----- handling DUMP message from", self.router.relations.get(srcif), "at", srcif, "-----")
-        self.router.sendJson(srcif, self.router.cache)
-        # TODO: fix dump msg format
+        # Assuming router.cache is a list of dictionaries containing route announcements
+        cached_routes = self.router.cache
+        routing_table = self.router.routing_table
+        converted_msg = list(routing_table.values())
+        print("Routing table:", converted_msg)
+
+        # TODO: Perform aggregation on cached_routes if needed
+
+        # Create the "table" message format
+        table_message = {
+            "src": update["dst"],          # Change to your router's IP
+            "dst": update["src"],
+            "type": "table",
+            "msg": converted_msg
+        }
+
+        # Send the "table" message back to the source router
+        self.router.sendJson(srcif, table_message)
 
 
     def handle_unknown_message(self, msg, srcif):
