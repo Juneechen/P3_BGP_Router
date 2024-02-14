@@ -101,6 +101,7 @@ class Router:
         # Find all matching routes
         for network, list_of_routes in self.routing_table.items():
             for route in list_of_routes:
+                
                 network_ip_int = utils.parse_ip(network)
                 mask_int = utils.parse_ip(route['netmask'])
 
@@ -118,8 +119,11 @@ class Router:
         if not matching_routes:
             return None
         else:
-            sorted_routes = sorted(matching_routes, key=utils.custom_sort, reverse=True)
+            print(f'\n------ ALL MATCHING ROUTES to {dest}: {matching_routes} ------------')
+            sorted_routes = sorted(matching_routes, key=utils.custom_sort)
             # return sorted_routes[0][1]['peer']
+            best_route = sorted_routes[0][1]['peer']
+            print(f'------ BEST ROUTES to {dest}: {best_route} ------------\n')
             return sorted_routes[0][1]['peer']
     
 

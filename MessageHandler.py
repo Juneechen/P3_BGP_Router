@@ -82,15 +82,16 @@ class MessageHandler:
         {'src': '172.168.0.25', 'dst': '192.168.0.25', 'type': 'data', 'msg': {'ignore': 'this'}}
         '''
 
-        print("----- handling DATA message from", self.router.relations.get(srcif), "at", srcif, "-----")
 
         # identify the destination AS and forward the message to the next hop
         dst = msg['dst']
         next_hop = self.router.get_route(dst) 
         # get_route() returns a single valid match, longest prefix and rules applied in get_route()
 
+        # print(f"----- handling DATA message from {self.router.relations.get(srcif)} at {srcif}, final dst [{dst}] ------")
+
         if next_hop: 
-            print(f'--------- Forwarding data to {next_hop} for {dst} ----------')
+            # print(f'\n--------- Forwarding data to neighbor [{next_hop}], final dst [{dst}] ----------\n')
             self.router.sendJson(next_hop, msg)
         else:
             print(f'No route to {dst} found in the routing table')
