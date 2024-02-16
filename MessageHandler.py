@@ -49,28 +49,26 @@ class MessageHandler:
         except KeyError as e:
             print(f'Error processing update message: {e}')
             
-    # Inside the Router class
-    def send_update_to_neighbors(self, msg, srcif):
-        # print('UPDATEMSG', update_msg, 'HAHA')
+    def send_update_to_neighbors(self, msg, srcif, msg_type='update'):
+        '''sends update or withdraw message to all neighbors except the source'''
 
         for neighbor, relation in self.router.relations.items():
-            # print('NEIGHBOR:', neighbor, 'RELATION:', relation)
-            # might send update to all neighbors except the source
             if neighbor != srcif: 
                 # send if src is customer or neighbor is customer 
                 if relation == 'cust' or self.router.relations[srcif] == 'cust':
                     print(f'----- Forwarding update to {relation} at {neighbor} -----')
 
+                    inner_msg = msg 
+                    if msg_type == 'update':
+                        inner_msg = {'netmask': msg['netmask'],
+                                     'ASPath': [self.router.asn] + msg['ASPath'],
+                                     'network': msg['network']}
+                        
                     forwarded_msg = {
-                        'msg': {
-                            'netmask': msg['netmask'],
-                            # 'ASPath': [self.router.asn] + update_msg['msg']['ASPath'],
-                            'ASPath': [self.router.asn] + msg['ASPath'],
-                            'network': msg['network']
-                        },
+                        'msg': inner_msg,
                         'src': self.router.our_addr(neighbor),
                         'dst': neighbor, # Set destination to the neighbor
-                        'type': 'update'
+                        'type': msg_type
                     }
                     self.router.sendJson(neighbor, forwarded_msg)
                     # self.router.send(neighbor, json.dumps(forwarded_msg))   
