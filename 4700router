@@ -14,7 +14,7 @@ class Router:
     sockets = {}
     ports = {}
     cache = [] # list of dictionaries, each is a routing announcement
-    routing_table = defaultdict(list) # network -> a list of all known pathes { 'dest network': [{ localpref : 100, ...  }, {}, ...] }
+    routing_table = defaultdict(list) # network -> a list of all known routes { 'dest network': [{ localpref : 100, ...  }, {}, ...] }
 
     def __init__(self, asn, connections):
         print("Router at AS %s starting up" % asn)
@@ -36,7 +36,7 @@ class Router:
         return '%d.%d.%d.%d' % (quads[0], quads[1], quads[2], quads[3])
 
     def send(self, network, message):
-        self.sockets[network].sendto(message.encode('utf-8'), ('localhost', self.ports[network])) #Shujun's
+        self.sockets[network].sendto(message.encode('utf-8'), ('localhost', self.ports[network])) 
 
     def sendJson(self, network, message):
         self.sockets[network].sendto(json.dumps(message).encode('utf-8'), ('localhost', self.ports[network])) #modified
@@ -44,10 +44,7 @@ class Router:
     def cache_update(self, update_msg: dict, srcif):
         ''' Cache the update message
         '''
-        # print('CACHING', update_msg)
         cache_msg = deepcopy(update_msg)
-        # cache_msg['msg']['peer'] = srcif
-
         self.cache.append(cache_msg)
 
     def update_table(self, msg: dict, srcif):
@@ -62,22 +59,10 @@ class Router:
             },
         add key "peer" (nexthop for this path) = srcif
         '''
-        # TODO: turn router table into a graph and apply dijkstra to update?
-
         network = msg['network']
         copy = deepcopy(msg)
         copy['peer'] = srcif
-
-        # TODO: verify whether to append our router to the ASPath or not
-
-        # skip rules (for now until error), store all routes in our routing table
         self.routing_table[network].append(copy)
-        # if not network in self.routing_table:
-        #     self.routing_table[network] = copy
-        # else:
-        #     if msg['localpref'] > self.routing_table[network]['localpref'] and True: # TODO: expand update logic?
-        #         self.routing_table[network] = copy
-
 
 
     def get_route(self, srcif, dest):
@@ -86,46 +71,37 @@ class Router:
         encoding IP addresses as numbers and using bitwise logic to determine 
         (1) whether two addresses match and 
         (2) the length of the match in bits
-        Then, apply rules and longest prefix match to find the next hop
+        Find longest prefix match and apply rules to get the next hop
+        Check relations, drop “data” messages when the transit relationship is not profitable.
         '''
-        # TODO: drop “data” messages when the transit relationship is not profitable.
-
-        matching_routes = []
-        # longest_match = 0
-        # next_hop = None
 
         # encoding IP addresses and mask as numbers
         dest_ip_int = utils.parse_ip(dest)
 
         # Find all matching routes
+        matching_routes = []
         for network, list_of_routes in self.routing_table.items():
             for route in list_of_routes:
-                
                 network_ip_int = utils.parse_ip(network)
                 mask_int = utils.parse_ip(route['netmask'])
 
                 # apply bitwise logic and find all matches, 
                 # in case the longest match does not satisfy rules (maybe src is peer and next hope is also peer?)
                 if (dest_ip_int & mask_int) == (network_ip_int & mask_int):
-                    matching_routes.append((network, route, mask_int))
-
-                # if mask_int > longest_match:
-                #     longest_match = mask_int
-                #     next_hop = route['peer']
+                    matching_routes.append(route)
         
         # if source is not customer, filter out non-customer next hops
         if self.relations[srcif] != 'cust':
-            matching_routes = [route for route in matching_routes if self.relations[route[1]['peer']] == 'cust']
+            matching_routes = [route for route in matching_routes if self.relations[route['peer']] == 'cust']
 
         if not matching_routes:
             return None
         else:
-            print(f'\n------ ALL MATCHING ROUTES to {dest}: {matching_routes} ------------')
+            # print(f'\n------ ALL MATCHING ROUTES to {dest}: {matching_routes} ------------')
             sorted_routes = sorted(matching_routes, key=utils.custom_sort)
-            # return sorted_routes[0][1]['peer']
-            best_route = sorted_routes[0][1]['peer']
-            print(f'------ BEST ROUTES to {dest}: {best_route} ------------\n')
-            return sorted_routes[0][1]['peer']
+            best_route = sorted_routes[0]['peer']
+            # print(f'------ BEST ROUTES to {dest}: {best_route} ------------\n')
+            return sorted_routes[0]['peer']
     
 
     def run(self):
@@ -143,13 +119,11 @@ class Router:
                         break # found
                 msg = k.decode('utf-8')
 
-                print("Received message '%s' from %s" % (msg, srcif))
+                # print("Received message '%s' from %s" % (msg, srcif))
 
                 self.message_handler.handle_message(msg, srcif)
         return
     
-
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='route packets')
