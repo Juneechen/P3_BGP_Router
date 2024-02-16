@@ -27,4 +27,21 @@ def custom_sort(entry):
 
     return (-localpref, -selfOrigin, ASPath_len, origin_preference, peer_ip, -mask_int)
 
+def aggr_route_pair(a, b):
+    ''' 
+    route_a, route_b: dict with keys: ['network', 'netmask', 'localpref', 'ASPath', 'origin', 'selfOrigin', 'peer']
+    '''
+    # if route_a['network'] != route_b['network']:
+    #     return None
+
+    if (a['localpref'] != b['localpref'] or 
+        a['origin'] != b['origin'] or 
+        a['selfOrigin'] != b['selfOrigin'] or 
+        a['ASPath'] != b['ASPath'] or 
+        a['peer'] != b['peer'] or
+        a['netmask'] != b['netmask']):
+        return None
+
+    # TODO: check masked prefix 
+
         

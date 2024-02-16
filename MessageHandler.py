@@ -98,7 +98,7 @@ class MessageHandler:
 
         # identify the destination AS and forward the message to the next hop
         dst = msg['dst']
-        next_hop = self.router.get_route(dst) 
+        next_hop = self.router.get_route(srcif, dst) 
         # get_route() returns a single valid match, longest prefix and rules applied in get_route()
 
         # print(f"----- handling DATA message from {self.router.relations.get(srcif)} at {srcif}, final dst [{dst}] ------")
@@ -118,7 +118,8 @@ class MessageHandler:
             self.router.sendJson(srcif, no_route_msg)
 
     def handle_withdraw_message(self, withdrawal_msg: dict, srcif):
-        """_summary_
+        """
+        withdrawal_msg:
         {
             "src":  "<source IP>",        # Example: 172.65.0.2
             "dst":  "<destination IP>",   # Example: 172.65.0.1
@@ -130,34 +131,45 @@ class MessageHandler:
                 ...
             ]
         }
-
-        Args:
-            msg (dict): _description_
-            srcif (_type_): _description_
         """
         print("----- handling WITHDRAW message from", self.router.relations.get(srcif), "at", srcif, "-----")
-        source = withdrawal_msg["src"]
-        destination = withdrawal_msg["dst"]
-        print("SRC DST", source, " - ", destination)
-
-        entries_to_complete_remove = []
-
-        for entry in withdrawal_msg["msg"]:
-            network = entry["network"]
-            netmask = entry["netmask"]
-            for network in self.router.routing_table:
-                # Filter out entries matching the withdrawn network and netmask
-                self.router.routing_table[network] = [path for path in self.router.routing_table[network] if path.get("netmask") != netmask]
-                print("HERE", network)
-                # Remove the network key if no paths remain
-                if not self.router.routing_table[network]:
-                    print("DELETING",network)
-                    entries_to_complete_remove.append(network)
         
-        # Remove the entries outside the loop to avoid dictionary size change during iteration
-        for entry in entries_to_complete_remove:
-            if entry in self.router.routing_table:
-                del self.router.routing_table[entry]
+        to_remove = withdrawal_msg['msg']
+        
+        for each in to_remove:
+            network = each['network'] # one of the networks to remove
+            routes = self.router.routing_table[network] # all routes for this network
+            for route in routes:
+                if route['peer'] == srcif:
+                    routes.remove(route) # remove route
+                    break
+            if routes == []:
+                del self.router.routing_table[network] # remove key if no routes left
+
+        # # print table before withdrawal
+        # print("----------- BEFORE WITHDRAWAL", self.router.routing_table)
+                
+        # entries_to_complete_remove = []
+
+        # for entry in withdrawal_msg["msg"]:
+        #     network = entry["network"]
+        #     netmask = entry["netmask"]
+        #     for network in self.router.routing_table:
+        #         # Filter out entries matching the withdrawn network and netmask
+        #         self.router.routing_table[network] = [path for path in self.router.routing_table[network] if path.get("netmask") != netmask]
+        #         print("HERE", network)
+        #         # Remove the network key if no paths remain
+        #         if not self.router.routing_table[network]:
+        #             print("DELETING",network)
+        #             entries_to_complete_remove.append(network)
+        
+        # # Remove the entries outside the loop to avoid dictionary size change during iteration
+        # for entry in entries_to_complete_remove:
+        #     if entry in self.router.routing_table:
+        #         del self.router.routing_table[entry]
+
+        # # print table after withdrawal
+        # print("----------- AFTER WITHDRAWAL", self.router.routing_table)
         
         self.send_withdraw_to_neighbors(withdrawal_msg, srcif)
 
