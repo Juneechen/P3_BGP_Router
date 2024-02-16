@@ -80,7 +80,7 @@ class Router:
 
 
 
-    def get_route(self, dest):
+    def get_route(self, srcif, dest):
         ''' 
         Find the route to a destination network, return the next hop if exists.
         encoding IP addresses as numbers and using bitwise logic to determine 
@@ -113,7 +113,9 @@ class Router:
                 #     longest_match = mask_int
                 #     next_hop = route['peer']
         
-        # TODO: if source is not customer, filter out non-customer next hops
+        # if source is not customer, filter out non-customer next hops
+        if self.relations[srcif] != 'cust':
+            matching_routes = [route for route in matching_routes if self.relations[route[1]['peer']] == 'cust']
 
         if not matching_routes:
             return None

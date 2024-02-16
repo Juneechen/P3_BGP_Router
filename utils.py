@@ -1,8 +1,16 @@
+from copy import deepcopy
+
 def parse_ip(ip):
     ''' 
     ip in dotted decimal notation to integer
     '''
     return sum(int(x) << (24 - i * 8) for i, x in enumerate(ip.split('.')))
+
+def int_to_ip(ip_int):
+    ''' 
+    ip in integer to dotted decimal notation
+    '''
+    return '.'.join(str((ip_int >> (24 - i * 8)) & 0xFF) for i in range(4))
 
    
 def custom_sort(entry):
@@ -30,18 +38,30 @@ def custom_sort(entry):
 def aggr_route_pair(a, b):
     ''' 
     route_a, route_b: dict with keys: ['network', 'netmask', 'localpref', 'ASPath', 'origin', 'selfOrigin', 'peer']
+    return the aggregated route if possible, None otherwise
     '''
-    # if route_a['network'] != route_b['network']:
-    #     return None
-
-    if (a['localpref'] != b['localpref'] or 
+ 
+    if (a['network'] == b['network'] or # same network, can not aggregate
+        a['localpref'] != b['localpref'] or 
         a['origin'] != b['origin'] or 
         a['selfOrigin'] != b['selfOrigin'] or 
         a['ASPath'] != b['ASPath'] or 
-        a['peer'] != b['peer'] or
-        a['netmask'] != b['netmask']):
+        a['netmask'] != b['netmask'] or 
+        a['peer'] != b['peer']): 
         return None
 
-    # TODO: check masked prefix 
+    ip1_int = parse_ip(a['network'])
+    ip2_int = parse_ip(b['network'])
+    mask_int = parse_ip(a['netmask']) # a and b have the same netmask
+    aggr_mask_int = mask_int & (mask_int - 1) # turn the rightmost 1 to 0, for example, CIDR 19 to 18
+
+    if (ip1_int & aggr_mask_int) != (ip2_int & aggr_mask_int):
+        return None
+    else:
+        new_route = deepcopy(a)
+        new_route['netmask'] = int_to_ip(aggr_mask_int)
+        new_route['network'] = int_to_ip(ip1_int & aggr_mask_int)
+        return new_route
+        
 
         
