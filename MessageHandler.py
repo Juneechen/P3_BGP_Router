@@ -73,7 +73,20 @@ class MessageHandler:
                         'type': 'update'
                     }
                     self.router.sendJson(neighbor, forwarded_msg)
-                    # self.router.send(neighbor, json.dumps(forwarded_msg))   
+
+    def send_withdraw_to_neighbors(self, msg, srcif):
+        # print('UPDATEMSG', update_msg, 'HAHA')
+
+        for neighbor, relation in self.router.relations.items():
+            # print('NEIGHBOR:', neighbor, 'RELATION:', relation)
+            # might send update to all neighbors except the source
+            if neighbor != srcif: 
+                # send if src is customer or neighbor is customer 
+                if relation == 'cust' or self.router.relations[srcif] == 'cust':
+                    print(f'----- Forwarding withdraw to {relation} at {neighbor} -----')
+                    msg["src"] = self.router.our_addr(neighbor)
+                    msg["dst"] = neighbor
+                    self.router.sendJson(neighbor, msg)
 
 
     def handle_data_message(self, msg: dict, srcif):
@@ -101,8 +114,54 @@ class MessageHandler:
                     'type': 'no route',
                     'msg': {}
                 }
+            print("NO ROUTE")
             self.router.sendJson(srcif, no_route_msg)
 
+    def handle_withdraw_message(self, withdrawal_msg: dict, srcif):
+        """_summary_
+        {
+            "src":  "<source IP>",        # Example: 172.65.0.2
+            "dst":  "<destination IP>",   # Example: 172.65.0.1
+            "type": "withdraw",                   
+            "msg": 
+            [
+                {"network": "<network prefix>", "netmask": "<associated subnet mask>"},
+                {"network": "<network prefix>", "netmask": "<associated subnet mask>"},
+                ...
+            ]
+        }
+
+        Args:
+            msg (dict): _description_
+            srcif (_type_): _description_
+        """
+        print("----- handling WITHDRAW message from", self.router.relations.get(srcif), "at", srcif, "-----")
+        source = withdrawal_msg["src"]
+        destination = withdrawal_msg["dst"]
+        print("SRC DST", source, " - ", destination)
+
+        entries_to_complete_remove = []
+
+        for entry in withdrawal_msg["msg"]:
+            network = entry["network"]
+            netmask = entry["netmask"]
+            for network in self.router.routing_table:
+                # Filter out entries matching the withdrawn network and netmask
+                self.router.routing_table[network] = [path for path in self.router.routing_table[network] if path.get("netmask") != netmask]
+                print("HERE", network)
+                # Remove the network key if no paths remain
+                if not self.router.routing_table[network]:
+                    print("DELETING",network)
+                    entries_to_complete_remove.append(network)
+        
+        # Remove the entries outside the loop to avoid dictionary size change during iteration
+        for entry in entries_to_complete_remove:
+            if entry in self.router.routing_table:
+                del self.router.routing_table[entry]
+        
+        self.send_withdraw_to_neighbors(withdrawal_msg, srcif)
+
+        return
 
     def handle_dump_message(self, update, srcif):
         print("----- handling DUMP message from", self.router.relations.get(srcif), "at", srcif, "-----")

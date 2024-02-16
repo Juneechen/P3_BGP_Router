@@ -72,7 +72,6 @@ class Router:
 
         # skip rules (for now until error), store all routes in our routing table
         self.routing_table[network].append(copy)
-
         # if not network in self.routing_table:
         #     self.routing_table[network] = copy
         # else:
