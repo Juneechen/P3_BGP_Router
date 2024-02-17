@@ -89,4 +89,7 @@ The router serializes its routing table cache for correctness checking.
 - Choosing the right data structure for the forwarding table is crucial for efficient route lookups and updates. Ended up with alist of JSON objects for fast lookup and restructuring it to a table during the dump, aggregation processes.
 - Choosing the right time to aggregate. In favour of performance during update, data messages, aggregate is performed in a lazy fashion ie: it happens when the router is expected to dump the routing table. 
 
+## Testing
+We implemented and tested each piece of the functionalies one by one, following the recommended implementation steps. Testing is mostly done by running the simulator and understanding the output messages.
+
 
