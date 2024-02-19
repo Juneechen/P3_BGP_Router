@@ -1,5 +1,7 @@
 #!/usr/bin/env -S python3 -u
 
+# Contributors: Shujun Chen, Ujwal Gupta for Computer Networks class at Northeastern: Spring'24.
+
 import argparse, socket, time, json, select, struct, sys, math
 from MessageHandler import MessageHandler
 import utils
@@ -118,8 +120,6 @@ class Router:
                         srcif = sock
                         break # found
                 msg = k.decode('utf-8')
-
-                # print("Received message '%s' from %s" % (msg, srcif))
 
                 self.message_handler.handle_message(msg, srcif)
         return
